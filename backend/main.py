@@ -12,17 +12,16 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from dotenv import load_dotenv
 
+# 导入LLM客户端
+from llm_client import LLMClient, PersonalityType
+
 # 加载环境变量
 load_dotenv()
 
 app = FastAPI(title="Desktop Pet API", version="1.0.0")
 
 # 数据模型
-class PersonalityType(str, Enum):
-    COLD = "cold"
-    CLINGY = "clingy"
-    PLAYFUL = "playful"
-    QUIET = "quiet"
+# PersonalityType 现在从 llm_client 导入
 
 class PetType(str, Enum):
     CAT = "cat"
@@ -209,64 +208,34 @@ class DatabaseManager:
 
 # 对话系统
 class DialogueManager:
-    def __init__(self):
-        self.personality_responses = {
-            PersonalityType.COLD: {
-                "greetings": ["哼", "嗯", "你好"],
-                "interactions": ["还行吧", "一般般", "凑合"],
-                "emotions": ["无所谓", "随便", "都可以"]
-            },
-            PersonalityType.CLINGY: {
-                "greetings": ["主人！", "你终于来了！", "想死你了！"],
-                "interactions": ["摸摸我嘛", "抱抱我", "不要走"],
-                "emotions": ["好开心", "太棒了", "爱你"]
-            },
-            PersonalityType.PLAYFUL: {
-                "greetings": ["喵喵！", "汪汪！", "你好呀！"],
-                "interactions": ["一起玩吧！", "好有趣！", "再来一次！"],
-                "emotions": ["太好玩了", "好兴奋", "超级开心"]
-            },
-            PersonalityType.QUIET: {
-                "greetings": ["你好", "嗯", "在"],
-                "interactions": ["好的", "嗯", "可以"],
-                "emotions": ["平静", "安宁", "舒适"]
-            }
-        }
+    def __init__(self, llm_client: LLMClient):
+        self.llm_client = llm_client
     
-    def generate_response(self, user_input: str, personality: PersonalityType) -> str:
-        """根据用户输入和性格生成响应"""
-        input_lower = user_input.lower()
-        
-        # 问候类
-        if any(word in input_lower for word in ["你好", "hello", "hi", "嗨"]):
-            return random.choice(self.personality_responses[personality]["greetings"])
-        
-        # 互动类
-        if any(word in input_lower for word in ["摸摸", "抱抱", "摸摸头", "摸摸我"]):
-            return random.choice(self.personality_responses[personality]["interactions"])
-        
-        # 情感类
-        if any(word in input_lower for word in ["开心", "高兴", "喜欢", "爱"]):
-            return random.choice(self.personality_responses[personality]["emotions"])
-        
-        # 默认响应
-        if personality == PersonalityType.COLD:
-            return random.choice(["嗯", "哦", "知道了"])
-        elif personality == PersonalityType.CLINGY:
-            return random.choice(["主人说什么都好", "我听主人的", "主人最棒了"])
-        elif personality == PersonalityType.PLAYFUL:
-            return random.choice(["喵喵！", "汪汪！", "好有趣！"])
-        else:  # QUIET
-            return random.choice(["嗯", "好的", "知道了"])
+    def generate_response(self, user_input: str, personality: PersonalityType, conversation_history: List[Dict] = None) -> str:
+        """使用LLM生成性格化的对话响应"""
+        return self.llm_client.generate_response(user_input, personality, conversation_history)
+    
+    def generate_greeting(self, personality: PersonalityType) -> str:
+        """生成主动问候"""
+        return self.llm_client.generate_greeting(personality)
 
 # 全局实例
 db_manager = DatabaseManager()
-dialogue_manager = DialogueManager()
+llm_client = LLMClient()
+dialogue_manager = DialogueManager(llm_client)
 
 # API 路由
 @app.get("/")
 async def root():
     return {"message": "Desktop Pet API"}
+
+@app.get("/llm/status")
+async def get_llm_status():
+    """获取LLM服务状态"""
+    return {
+        "available": llm_client.is_available(),
+        "provider": "deepseek" if llm_client.deepseek_api_key else "openai" if llm_client.openai_api_key else "none"
+    }
 
 @app.get("/pet", response_model=Pet)
 async def get_pet():
@@ -277,7 +246,16 @@ async def get_pet():
 async def send_message(request: MessageRequest):
     """发送消息给宠物"""
     pet = db_manager.get_or_create_pet()
-    response = dialogue_manager.generate_response(request.message, pet.personality)
+    
+    # 获取对话历史
+    conversation_history = db_manager.get_conversation_history(pet.id, 6)
+    
+    # 使用LLM生成响应
+    response = dialogue_manager.generate_response(
+        request.message, 
+        pet.personality, 
+        conversation_history
+    )
     
     # 保存对话记录
     db_manager.save_conversation(pet.id, request.message, response)
