@@ -12,8 +12,9 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from dotenv import load_dotenv
 
-# 导入LLM客户端
+# 导入LLM客户端和LangGraph Agent
 from llm_client import LLMClient, PersonalityType
+from pet_agent import PetAgent
 
 # 加载环境变量
 load_dotenv()
@@ -223,6 +224,7 @@ class DialogueManager:
 db_manager = DatabaseManager()
 llm_client = LLMClient()
 dialogue_manager = DialogueManager(llm_client)
+pet_agent = PetAgent(llm_client)
 
 # API 路由
 @app.get("/")
@@ -237,6 +239,36 @@ async def get_llm_status():
         "provider": "deepseek" if llm_client.deepseek_api_key else "openai" if llm_client.openai_api_key else "none"
     }
 
+@app.get("/pet/status")
+async def get_pet_status():
+    """获取宠物状态"""
+    pet = db_manager.get_or_create_pet()
+    agent_status = pet_agent.get_status()
+    
+    return {
+        "pet_id": pet.id,
+        "name": pet.name,
+        "type": pet.type,
+        "personality": pet.personality,
+        "mood": agent_status["mood"],
+        "energy": agent_status["energy"],
+        "last_interaction": agent_status["last_interaction"]
+    }
+
+@app.post("/pet/greeting")
+async def trigger_greeting():
+    """触发主动问候"""
+    pet = db_manager.get_or_create_pet()
+    
+    # 使用LangGraph Agent生成主动问候
+    result = pet_agent.invoke("", pet.personality)  # 空消息触发主动问候
+    
+    # 提取AI响应
+    ai_messages = [msg for msg in result["messages"] if hasattr(msg, 'content') and hasattr(msg, '__class__') and 'AIMessage' in str(msg.__class__)]
+    greeting = ai_messages[-1].content if ai_messages else "主人好~"
+    
+    return MessageResponse(response=greeting)
+
 @app.get("/pet", response_model=Pet)
 async def get_pet():
     """获取宠物信息"""
@@ -244,18 +276,15 @@ async def get_pet():
 
 @app.post("/message", response_model=MessageResponse)
 async def send_message(request: MessageRequest):
-    """发送消息给宠物"""
+    """发送消息给宠物（使用LangGraph Agent）"""
     pet = db_manager.get_or_create_pet()
     
-    # 获取对话历史
-    conversation_history = db_manager.get_conversation_history(pet.id, 6)
+    # 使用LangGraph Agent处理消息
+    result = pet_agent.invoke(request.message, pet.personality)
     
-    # 使用LLM生成响应
-    response = dialogue_manager.generate_response(
-        request.message, 
-        pet.personality, 
-        conversation_history
-    )
+    # 提取AI响应
+    ai_messages = [msg for msg in result["messages"] if hasattr(msg, 'content') and hasattr(msg, '__class__') and 'AIMessage' in str(msg.__class__)]
+    response = ai_messages[-1].content if ai_messages else "嗯..."
     
     # 保存对话记录
     db_manager.save_conversation(pet.id, request.message, response)
