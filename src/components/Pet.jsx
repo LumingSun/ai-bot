@@ -1,27 +1,59 @@
 import React from 'react';
 
-const Pet = ({ pet }) => {
-  if (!pet) return null;
+const Pet = ({ type = 'cat' }) => {
+  const getPetImage = (petType) => {
+    switch (petType) {
+      case 'cat':
+        return '/assets/cat.png';
+      case 'dog':
+        return '/assets/dog.png';
+      case 'rabbit':
+        return '/assets/rabbit.png';
+      case 'hamster':
+        return '/assets/hamster.png';
+      default:
+        return '/assets/cat.png';
+    }
+  };
 
-  const getPetImage = (type) => {
-    const petImages = {
-      cat: '/assets/cat.png',
-      dog: '/assets/dog.png',
-      rabbit: '/assets/rabbit.png',
-      hamster: '/assets/hamster.png'
-    };
-    return petImages[type] || petImages.cat;
+  const getPetEmoji = (petType) => {
+    switch (petType) {
+      case 'cat':
+        return '🐱';
+      case 'dog':
+        return '🐕';
+      case 'rabbit':
+        return '🐰';
+      case 'hamster':
+        return '🐹';
+      default:
+        return '🐱';
+    }
   };
 
   return (
-    <div className="pet-wrapper">
+    <div className="pet-image-container">
       <img
-        src={getPetImage(pet.type)}
-        alt={`${pet.name} (${pet.personality})`}
+        src={getPetImage(type)}
+        alt={`${type} pet`}
         className="pet-image"
-        style={{
-          filter: pet.personality === 'cold' ? 'grayscale(0.3)' : 'none',
-          transform: pet.personality === 'playful' ? 'scale(1.05)' : 'scale(1)'
+        onError={(e) => {
+          // 如果图片加载失败，显示emoji
+          e.target.style.display = 'none';
+          const emojiDiv = document.createElement('div');
+          emojiDiv.style.cssText = `
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 80px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 20px;
+            color: white;
+          `;
+          emojiDiv.textContent = getPetEmoji(type);
+          e.target.parentNode.appendChild(emojiDiv);
         }}
       />
     </div>

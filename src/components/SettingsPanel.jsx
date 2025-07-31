@@ -1,82 +1,74 @@
-import React, { useState } from 'react';
+import React from 'react';
 
-const SettingsPanel = ({ show, onOpacityChange, onSendMessage }) => {
-  const [message, setMessage] = useState('');
-  const [opacity, setOpacity] = useState(0.9);
+const SettingsPanel = ({ show, onClose, onPetTypeChange, currentPetType }) => {
+  const petTypes = [
+    { value: 'cat', label: '🐱 猫咪' },
+    { value: 'dog', label: '🐕 小狗' },
+    { value: 'rabbit', label: '🐰 兔子' },
+    { value: 'hamster', label: '🐹 仓鼠' }
+  ];
 
-
-
-  const handleOpacityChange = (e) => {
-    const newOpacity = parseFloat(e.target.value);
-    setOpacity(newOpacity);
-    onOpacityChange(newOpacity);
-  };
-
-  const handleSendMessage = () => {
-    if (message.trim()) {
-      onSendMessage(message.trim());
-      setMessage('');
-    }
-  };
-
-  const handleKeyPress = (e) => {
-    if (e.key === 'Enter') {
-      handleSendMessage();
-    }
-  };
-
-  const personalityLabels = {
-    cold: '高冷',
-    clingy: '粘人',
-    playful: '活泼',
-    quiet: '安静'
+  const handlePetTypeChange = (type) => {
+    onPetTypeChange(type);
   };
 
   if (!show) return null;
 
   return (
     <div className="settings-panel show">
-      <div style={{ marginBottom: '8px' }}>
-        <label style={{ display: 'block', marginBottom: '4px' }}>
-          透明度: {Math.round(opacity * 100)}%
-        </label>
-        <input
-          type="range"
-          min="0.1"
-          max="1"
-          step="0.1"
-          value={opacity}
-          onChange={handleOpacityChange}
-          style={{ width: '100%' }}
-        />
+      <div style={{ marginBottom: '12px', fontWeight: '600', color: '#667eea' }}>
+        🎨 设置
       </div>
       
-      <div style={{ marginBottom: '8px' }}>
-        <input
-          type="text"
-          placeholder="输入消息..."
-          value={message}
-          onChange={(e) => setMessage(e.target.value)}
-          onKeyPress={handleKeyPress}
-          style={{
-            width: '100%',
-            padding: '4px',
-            border: '1px solid #ccc',
-            borderRadius: '4px',
-            fontSize: '11px'
+      {/* 宠物类型选择器 */}
+      <div className="pet-type-selector">
+        {petTypes.map((pet) => (
+          <button
+            key={pet.value}
+            className={`pet-type-btn ${currentPetType === pet.value ? 'active' : ''}`}
+            onClick={() => handlePetTypeChange(pet.value)}
+            title={`选择${pet.label}`}
+          >
+            {pet.label}
+          </button>
+        ))}
+      </div>
+      
+      {/* 功能按钮 */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+        <button 
+          onClick={() => window.electronAPI.changePetType('cat')}
+          title="切换到猫咪"
+        >
+          🐱 切换猫咪
+        </button>
+        <button 
+          onClick={() => window.electronAPI.changePetType('dog')}
+          title="切换到小狗"
+        >
+          🐕 切换小狗
+        </button>
+        <button 
+          onClick={() => window.electronAPI.changePetType('rabbit')}
+          title="切换到兔子"
+        >
+          🐰 切换兔子
+        </button>
+        <button 
+          onClick={() => window.electronAPI.changePetType('hamster')}
+          title="切换到仓鼠"
+        >
+          🐹 切换仓鼠
+        </button>
+        <button 
+          onClick={onClose}
+          style={{ 
+            background: 'linear-gradient(135deg, #ff6b6b 0%, #ee5a52 100%)',
+            marginTop: '8px'
           }}
-        />
-      </div>
-      
-      <div style={{ display: 'flex', gap: '4px' }}>
-        <button onClick={handleSendMessage}>
-          发送
-        </button>
-        <button onClick={() => onSendMessage('你好')}>
-          问候
-        </button>
-        <button onClick={() => onSendMessage('摸摸头')}>
-          互动
+          title="关闭设置"
+        >
+          ❌ 关闭
         </button>
       </div>
     </div>
