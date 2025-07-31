@@ -12,6 +12,8 @@ from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 from langchain_openai import ChatOpenAI
 
 from llm_client import PersonalityType, LLMClient
+from tools import ToolManager
+from proactive_system import ProactiveSystem
 
 # 定义状态类型
 class PetState(TypedDict):
@@ -29,6 +31,8 @@ class PetAgent:
     
     def __init__(self, llm_client: LLMClient):
         self.llm_client = llm_client
+        self.tool_manager = ToolManager()
+        self.proactive_system = None  # 将在设置性格时初始化
         self.workflow = self._create_workflow()
     
     def _create_workflow(self) -> StateGraph:
@@ -43,13 +47,15 @@ class PetAgent:
         workflow.add_node("update_mood", self._update_mood_node)
         workflow.add_node("check_energy", self._check_energy_node)
         workflow.add_node("proactive_greeting", self._proactive_greeting_node)
+        workflow.add_node("tool_execution", self._tool_execution_node)
         
         # 设置入口点
         workflow.set_entry_point("analyze_input")
         
         # 添加边
         workflow.add_edge("analyze_input", "generate_response")
-        workflow.add_edge("generate_response", "update_mood")
+        workflow.add_edge("generate_response", "tool_execution")
+        workflow.add_edge("tool_execution", "update_mood")
         workflow.add_edge("update_mood", "check_energy")
         workflow.add_edge("check_energy", END)
         
@@ -171,6 +177,64 @@ class PetAgent:
         
         # 更新最后互动时间
         state["last_interaction"] = datetime.now().isoformat()
+        
+        return state
+    
+    def _tool_execution_node(self, state: PetState) -> PetState:
+        """工具执行节点"""
+        messages = state.get("messages", [])
+        context = state.get("context", {})
+        
+        # 检查是否需要执行工具
+        user_input = ""
+        for msg in reversed(messages):
+            if hasattr(msg, 'content') and hasattr(msg, '__class__') and 'HumanMessage' in str(msg.__class__):
+                user_input = msg.content.lower()
+                break
+        
+        # 根据用户输入决定是否执行工具
+        tool_results = []
+        
+        # 时间相关
+        if any(word in user_input for word in ["时间", "几点", "现在"]):
+            result = self.tool_manager.execute_tool("get_time")
+            if result.success:
+                tool_results.append(f"时间信息：{result.message}")
+        
+        # 天气相关
+        if any(word in user_input for word in ["天气", "温度", "下雨"]):
+            result = self.tool_manager.execute_tool("get_weather")
+            if result.success:
+                tool_results.append(f"天气信息：{result.message}")
+        
+        # 健康相关
+        if any(word in user_input for word in ["健康", "状态", "怎么样"]):
+            result = self.tool_manager.execute_tool("get_health")
+            if result.success:
+                tool_results.append(f"健康状态：{result.message}")
+        
+        # 提醒相关
+        if any(word in user_input for word in ["提醒", "待办", "任务"]):
+            result = self.tool_manager.execute_tool("get_reminders")
+            if result.success:
+                tool_results.append(f"提醒信息：{result.message}")
+        
+        # 喂食相关
+        if any(word in user_input for word in ["喂食", "吃饭", "饿了"]):
+            result = self.tool_manager.execute_tool("feed_pet")
+            if result.success:
+                tool_results.append(f"喂食结果：{result.message}")
+        
+        # 玩耍相关
+        if any(word in user_input for word in ["玩耍", "玩", "游戏"]):
+            result = self.tool_manager.execute_tool("play_with_pet")
+            if result.success:
+                tool_results.append(f"玩耍结果：{result.message}")
+        
+        # 更新上下文
+        if tool_results:
+            context["tool_results"] = tool_results
+            state["context"] = context
         
         return state
     
@@ -302,4 +366,20 @@ class PetAgent:
             "mood": "neutral",
             "energy": 100,
             "last_interaction": datetime.now().isoformat()
-        } 
+        }
+    
+    def setup_proactive_system(self, personality: PersonalityType):
+        """设置主动互动系统"""
+        self.proactive_system = ProactiveSystem(self.tool_manager, personality)
+        self.proactive_system.start()
+    
+    def stop_proactive_system(self):
+        """停止主动互动系统"""
+        if self.proactive_system:
+            self.proactive_system.stop()
+    
+    def trigger_proactive_event(self, event_type: str) -> Optional[str]:
+        """触发主动事件"""
+        if self.proactive_system:
+            return self.proactive_system.trigger_manual_event(event_type)
+        return None 

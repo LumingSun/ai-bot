@@ -15,6 +15,7 @@ from dotenv import load_dotenv
 # 导入LLM客户端和LangGraph Agent
 from llm_client import LLMClient, PersonalityType
 from pet_agent import PetAgent
+from tools import ToolManager
 
 # 加载环境变量
 load_dotenv()
@@ -225,6 +226,7 @@ db_manager = DatabaseManager()
 llm_client = LLMClient()
 dialogue_manager = DialogueManager(llm_client)
 pet_agent = PetAgent(llm_client)
+tool_manager = ToolManager()
 
 # API 路由
 @app.get("/")
@@ -268,6 +270,48 @@ async def trigger_greeting():
     greeting = ai_messages[-1].content if ai_messages else "主人好~"
     
     return MessageResponse(response=greeting)
+
+@app.post("/tools/execute")
+async def execute_tool(tool_name: str, **kwargs):
+    """执行工具"""
+    result = tool_manager.execute_tool(tool_name, **kwargs)
+    return {
+        "success": result.success,
+        "data": result.data,
+        "message": result.message
+    }
+
+@app.get("/tools/available")
+async def get_available_tools():
+    """获取可用工具列表"""
+    return {
+        "tools": tool_manager.get_available_tools()
+    }
+
+@app.post("/proactive/trigger")
+async def trigger_proactive_event(event_type: str):
+    """触发主动事件"""
+    pet = db_manager.get_or_create_pet()
+    
+    # 确保主动互动系统已设置
+    if not pet_agent.proactive_system:
+        pet_agent.setup_proactive_system(pet.personality)
+    
+    message = pet_agent.trigger_proactive_event(event_type)
+    return MessageResponse(response=message or "没有触发事件")
+
+@app.post("/proactive/start")
+async def start_proactive_system():
+    """启动主动互动系统"""
+    pet = db_manager.get_or_create_pet()
+    pet_agent.setup_proactive_system(pet.personality)
+    return {"message": "主动互动系统已启动"}
+
+@app.post("/proactive/stop")
+async def stop_proactive_system():
+    """停止主动互动系统"""
+    pet_agent.stop_proactive_system()
+    return {"message": "主动互动系统已停止"}
 
 @app.get("/pet", response_model=Pet)
 async def get_pet():
