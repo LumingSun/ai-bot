@@ -3,7 +3,7 @@
 """
 
 import asyncio
-from typing import TypedDict, Annotated, Literal
+from typing import TypedDict, Annotated, Literal, Optional
 from datetime import datetime
 import random
 
@@ -53,9 +53,9 @@ class PetAgent:
         workflow.set_entry_point("analyze_input")
         
         # 添加边
-        workflow.add_edge("analyze_input", "generate_response")
-        workflow.add_edge("generate_response", "tool_execution")
-        workflow.add_edge("tool_execution", "update_mood")
+        workflow.add_edge("analyze_input", "tool_execution")
+        workflow.add_edge("tool_execution", "generate_response")
+        workflow.add_edge("generate_response", "update_mood")
         workflow.add_edge("update_mood", "check_energy")
         workflow.add_edge("check_energy", END)
         
@@ -65,7 +65,7 @@ class PetAgent:
             self._should_greet_condition,
             {
                 "proactive_greeting": "proactive_greeting",
-                "generate_response": "generate_response"
+                "generate_response": "tool_execution"
             }
         )
         
@@ -150,6 +150,7 @@ class PetAgent:
         """生成响应节点"""
         messages = state.get("messages", [])
         personality = state.get("personality", PersonalityType.QUIET)
+        context = state.get("context", {})
         
         if not messages:
             return state
@@ -164,12 +165,31 @@ class PetAgent:
         if not user_input:
             return state
         
-        # 使用LLM生成响应
-        response = self.llm_client.generate_response(
-            user_input, 
-            personality,
-            self._format_conversation_history(messages)
-        )
+        # 检查是否有工具执行结果
+        tool_results = context.get("tool_results", [])
+        print(f"🤖 响应生成节点 - 工具结果: {tool_results}")
+        
+        # 构建响应内容
+        if tool_results:
+            # 如果有工具结果，将其作为上下文传递给LLM
+            tool_info = "\n".join(tool_results)
+            enhanced_input = f"{user_input}\n\n工具信息：{tool_info}"
+            print(f"🔧 增强的用户输入: {enhanced_input}")
+            
+            response = self.llm_client.generate_response(
+                enhanced_input, 
+                personality,
+                self._format_conversation_history(messages)
+            )
+            print(f"✅ 包含工具结果的响应: {response}")
+        else:
+            # 正常生成响应
+            response = self.llm_client.generate_response(
+                user_input, 
+                personality,
+                self._format_conversation_history(messages)
+            )
+            print(f"📝 普通响应: {response}")
         
         # 添加AI响应到消息列表
         ai_message = AIMessage(content=response)
@@ -192,49 +212,78 @@ class PetAgent:
                 user_input = msg.content.lower()
                 break
         
+        print(f"🔧 工具执行节点 - 用户输入: {user_input}")
+        
         # 根据用户输入决定是否执行工具
         tool_results = []
         
         # 时间相关
         if any(word in user_input for word in ["时间", "几点", "现在"]):
+            print(f"⏰ 检测到时间查询，执行时间工具")
             result = self.tool_manager.execute_tool("get_time")
             if result.success:
                 tool_results.append(f"时间信息：{result.message}")
+                print(f"✅ 时间工具执行成功: {result.message}")
+            else:
+                print(f"❌ 时间工具执行失败: {result.message}")
         
         # 天气相关
         if any(word in user_input for word in ["天气", "温度", "下雨"]):
+            print(f"🌤️ 检测到天气查询，执行天气工具")
             result = self.tool_manager.execute_tool("get_weather")
             if result.success:
                 tool_results.append(f"天气信息：{result.message}")
+                print(f"✅ 天气工具执行成功: {result.message}")
+            else:
+                print(f"❌ 天气工具执行失败: {result.message}")
         
         # 健康相关
         if any(word in user_input for word in ["健康", "状态", "怎么样"]):
+            print(f"💊 检测到健康查询，执行健康工具")
             result = self.tool_manager.execute_tool("get_health")
             if result.success:
                 tool_results.append(f"健康状态：{result.message}")
+                print(f"✅ 健康工具执行成功: {result.message}")
+            else:
+                print(f"❌ 健康工具执行失败: {result.message}")
         
         # 提醒相关
         if any(word in user_input for word in ["提醒", "待办", "任务"]):
+            print(f"📝 检测到提醒查询，执行提醒工具")
             result = self.tool_manager.execute_tool("get_reminders")
             if result.success:
                 tool_results.append(f"提醒信息：{result.message}")
+                print(f"✅ 提醒工具执行成功: {result.message}")
+            else:
+                print(f"❌ 提醒工具执行失败: {result.message}")
         
         # 喂食相关
         if any(word in user_input for word in ["喂食", "吃饭", "饿了"]):
+            print(f"🍽️ 检测到喂食请求，执行喂食工具")
             result = self.tool_manager.execute_tool("feed_pet")
             if result.success:
                 tool_results.append(f"喂食结果：{result.message}")
+                print(f"✅ 喂食工具执行成功: {result.message}")
+            else:
+                print(f"❌ 喂食工具执行失败: {result.message}")
         
         # 玩耍相关
         if any(word in user_input for word in ["玩耍", "玩", "游戏"]):
+            print(f"🎮 检测到玩耍请求，执行玩耍工具")
             result = self.tool_manager.execute_tool("play_with_pet")
             if result.success:
                 tool_results.append(f"玩耍结果：{result.message}")
+                print(f"✅ 玩耍工具执行成功: {result.message}")
+            else:
+                print(f"❌ 玩耍工具执行失败: {result.message}")
         
         # 更新上下文
         if tool_results:
             context["tool_results"] = tool_results
             state["context"] = context
+            print(f"📦 工具结果已保存到上下文: {tool_results}")
+        else:
+            print(f"ℹ️ 没有检测到需要执行的工具")
         
         return state
     

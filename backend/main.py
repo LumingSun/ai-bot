@@ -233,6 +233,10 @@ tool_manager = ToolManager()
 async def root():
     return {"message": "Desktop Pet API"}
 
+@app.head("/")
+async def root_head():
+    return {"message": "Desktop Pet API"}
+
 @app.get("/llm/status")
 async def get_llm_status():
     """获取LLM服务状态"""
@@ -318,6 +322,11 @@ async def get_pet():
     """获取宠物信息"""
     return db_manager.get_or_create_pet()
 
+@app.head("/pet")
+async def get_pet_head():
+    """获取宠物信息 - HEAD方法"""
+    return {"message": "Pet info available"}
+
 @app.post("/message", response_model=MessageResponse)
 async def send_message(request: MessageRequest):
     """发送消息给宠物（使用LangGraph Agent）"""
@@ -360,4 +369,33 @@ async def change_pet_type(pet_type: PetType):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="127.0.0.1", port=8000) 
+    import os
+    import sys
+    
+    # 进程锁文件
+    lock_file = "/tmp/desktop_pet_backend.lock"
+    
+    # 检查是否已有进程在运行
+    if os.path.exists(lock_file):
+        try:
+            with open(lock_file, 'r') as f:
+                pid = int(f.read().strip())
+            # 检查进程是否还在运行
+            os.kill(pid, 0)  # 发送信号0检查进程是否存在
+            print(f"Backend already running with PID {pid}")
+            sys.exit(1)
+        except (ValueError, OSError):
+            # 进程不存在，删除锁文件
+            os.remove(lock_file)
+    
+    # 创建锁文件
+    try:
+        with open(lock_file, 'w') as f:
+            f.write(str(os.getpid()))
+        
+        # 启动服务器
+        uvicorn.run(app, host="127.0.0.1", port=8001)
+    finally:
+        # 清理锁文件
+        if os.path.exists(lock_file):
+            os.remove(lock_file) 

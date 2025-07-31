@@ -98,7 +98,7 @@ ipcMain.handle('show-window', () => {
 // 宠物相关 API
 ipcMain.handle('get-pet-info', async () => {
   try {
-    const response = await fetch('http://127.0.0.1:8000/pet');
+    const response = await fetch('http://127.0.0.1:8001/pet');
     return await response.json();
   } catch (error) {
     console.error('Failed to get pet info:', error);
@@ -108,7 +108,7 @@ ipcMain.handle('get-pet-info', async () => {
 
 ipcMain.handle('send-message', async (event, message) => {
   try {
-    const response = await fetch('http://127.0.0.1:8000/message', {
+    const response = await fetch('http://127.0.0.1:8001/message', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -125,7 +125,7 @@ ipcMain.handle('send-message', async (event, message) => {
 
 ipcMain.handle('get-conversation-history', async () => {
   try {
-    const response = await fetch('http://127.0.0.1:8000/conversations');
+    const response = await fetch('http://127.0.0.1:8001/conversations');
     return await response.json();
   } catch (error) {
     console.error('Failed to get conversation history:', error);
@@ -135,7 +135,7 @@ ipcMain.handle('get-conversation-history', async () => {
 
 ipcMain.handle('change-pet-type', async (event, type) => {
   try {
-    const response = await fetch('http://127.0.0.1:8000/pet/change-type', {
+    const response = await fetch('http://127.0.0.1:8001/pet/change-type', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
